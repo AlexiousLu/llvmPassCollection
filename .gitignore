@@ -1,6 +1,11 @@
 .vscode
-**/build
+**/.cache
 
+**/build
+Data
+
+Lib/*
+!Lib/.gitkeep
 
 test.*
 temp.*
