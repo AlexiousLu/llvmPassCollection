@@ -1,7 +1,9 @@
 #include <ModuleLoader.hh>
 #include <cstddef>
 #include <fstream>
+#include <llvm/IR/LLVMContext.h>
 #include <vector>
+#include <omp.h>
 
 
 LLVMContext* ModuleLoader::parse_LLVMContext(LLVMContext* context){
@@ -35,23 +37,25 @@ map<string, Module*>* ModuleLoader::loadModule(vector<string> filelist, LLVMCont
     if(!slience) {
         cout << "Total " << filelist.size() << " file(s)" << endl;
     }
+
+    for(string filename : filelist){
+        (*ret)[filename] = (Module*)0;
+    }
+
     int i = 0;
-    for (string filename : filelist){
-        unique_ptr<Module> M = parseIRFile(filename, *err, *context);
-        if (M == NULL) {
-            cerr << "error loading file: '" << filename << "'\n";
-            (*ret)[filename] = nullptr;
-            // ret->insert(pair<string, Module*>(filename, nullptr));
-        } else {
-            (*ret)[filename] = M.release();
-            i++;
-            if (!slience && i % 500 == 0){
-                cout << "." << flush;
-            }
+
+    #pragma omp parallel for num_threads(10) private(err)
+    for (i = 0; i < filelist.size(); i++){
+        string filename = filelist[i];
+        LLVMContext* context1 = new LLVMContext(); // TODO: parallel requires private context, but set arg-context causes segfault.
+        (*ret)[filename] = this->loadModule(filename, context1, err);
+        if (!slience && i % 500 == 0){
+            cout << "." << flush;
         }
     }
+    
     if(!slience) {
-        cout << endl << i << "Module(s) Loaded succfully." << endl;
+        cout << endl << "Module(s) Loaded succfully." << endl;
     } 
     return ret;
 }
@@ -69,7 +73,6 @@ map<string, Module*>* ModuleLoader::loadModules(string bclistFile, LLVMContext* 
     string buf;
     while(!inf.eof()) {
         inf >> buf;
-        cout << buf << endl;
         paths -> push_back(buf);
     }
     return this->loadModule(*paths, context, err, slience);

@@ -1,6 +1,12 @@
+#ifndef LLVM_MODULE_LOADER_HH
+#define LLVM_MODULE_LOADER_HH
+
 #include <iostream>
-#include <llvm/IR/LLVMContext.h>
 #include <map>
+#include <cstddef>
+#include <fstream>
+#include <vector>
+#include <thread>
 #include <include_llvm.hh>
 
 
@@ -31,3 +37,5 @@ public:
     map<string, Module*>* loadModules(string bclistFile, bool slience);
     
 };
+
+#endif
