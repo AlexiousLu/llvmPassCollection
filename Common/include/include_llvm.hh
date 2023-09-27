@@ -4,3 +4,7 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/InstIterator.h>
 #include <llvm/Support/SourceMgr.h>
+#include <llvm/IR/DebugInfoMetadata.h>
+#include <llvm/IR/Metadata.h>
+#include <llvm/Support/Casting.h>
+#include <llvm/IR/Value.h>
