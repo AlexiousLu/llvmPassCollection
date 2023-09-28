@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <iostream>
+#include <iterator>
 #include "include_llvm.hh"
 
 
@@ -18,7 +19,9 @@ protected:
     unsigned char node_type;
     enum {
         ROOT_NODE=1,
-
+        MODULE_NODE,
+        STRUCT_NODE,
+        MEMBER_NODE,
     };
 public:
     Node(unsigned char type): node_type(type){}
@@ -26,8 +29,14 @@ public:
     Node* getParent(){ return this->parent; }
     void setParent(Node* node) { this->parent = node; }
 
-    unsigned char getNodeType(){ return this->node_type; }
+    bool virtual isLeafNode();
 
+    unsigned char getNodeType(){ return this->node_type; }
+    bool isRootNode() { return this->node_type == ROOT_NODE; }
+    bool isModuleNode() { return this->node_type == MODULE_NODE; }
+    bool isStructNode() { return this->node_type == STRUCT_NODE; }
+
+    //TODO: iterator<typename Category, typename Tp> traverse {};
 };
 
 template <typename K, typename V>
@@ -42,6 +51,9 @@ public:
     }
     V& getChild(const K& key){
         return (*this)[key];
+    }
+    bool isLeafNode() {
+        return this->children.empty();
     }
 };
 
@@ -63,27 +75,65 @@ public:
     V& getChild(const K& key){
         return (*this)[key];
     }
+
+    bool isLeafNode() {
+        return this->children.empty();
+    }
 };
 
-class TypeNode: public Node{
+class RootNode;
+class ModuleNode;
+class StructNode;
+class MemberNode;
+
+class MemberNode: public Node{
+private:
+    string member_name;
+    string type_str;
+    bool is_derived;
+    bool is_basetype;
+    StructNode* derived_pointer;
 public:
-    TypeNode(): Node(4){}
+    MemberNode(): Node(MEMBER_NODE){
+        this->member_name = "";
+        this->type_str = "";
+        this->is_derived = false;
+        this->is_basetype = false;
+        this->derived_pointer=nullptr; 
+    }
+    MemberNode(StructNode* s): MemberNode(){ this->setParent((Node*)s); } 
+    MemberNode(string member_name, string type_str, unsigned char der_base=0): Node(MEMBER_NODE) {
+        this->member_name = member_name;
+        this->type_str = type_str;
+        this->is_derived = der_base == 0 ? false : true;
+        this->is_basetype = der_base == 0 ? true : false;
+    }
+    
+    bool isLeafNode() {
+        return true;
+    }
 };
 
-class StructNode: public OrderedMappingNode<string, Node> {
+class StructNode: public OrderedMappingNode<string, MemberNode> {
+private:
+    string struct_name;
+    vector<DIVariable> from_variable; //TODO: pending
 public:
-    StructNode(): OrderedMappingNode<string, Node>(3){}
+    StructNode(): OrderedMappingNode<string, MemberNode>(STRUCT_NODE){}
+    StructNode(ModuleNode* m): StructNode(){ this->setParent((Node*)m); }
+    
 };
 
 
 class ModuleNode: public MappingNode<string, StructNode> {
 public:
-    ModuleNode(): MappingNode<string, StructNode>(2){}
+    ModuleNode(): MappingNode<string, StructNode>(STRUCT_NODE){}
+    ModuleNode(RootNode* r): ModuleNode(){ this->setParent((Node*)r); }
 };
 
 class RootNode: public MappingNode<string, ModuleNode> {
 public:
-    RootNode(): MappingNode<string, ModuleNode>(1){}
+    RootNode(): MappingNode<string, ModuleNode>(ROOT_NODE){}
 };
 
 
