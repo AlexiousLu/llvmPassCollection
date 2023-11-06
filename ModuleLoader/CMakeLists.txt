@@ -42,6 +42,7 @@ message(STATUS "Found SourceCodes: ${SourceCodes}")
 
 # Build libraries.
 link_directories(../Lib)
+# add_compile_options(-fPIC)
 add_library (${CMAKE_PROJECT_NAME} SHARED ${SourceCodes})
 target_link_libraries(${CMAKE_PROJECT_NAME}
   PUBLIC
