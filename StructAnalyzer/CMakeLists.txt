@@ -26,11 +26,16 @@ if(OpenMP_CXX_FOUND)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
+# other package in this dictionary
 set(REQUIRED_PACKAGES ModuleLoader ModuleAnalyzer)
 set(REQUIRED_PACKAGES_INCLUDE "")
 list(TRANSFORM REQUIRED_PACKAGES PREPEND ../ OUTPUT_VARIABLE REQUIRED_PACKAGES_INCLUDE)
 list(TRANSFORM REQUIRED_PACKAGES_INCLUDE APPEND /include)
 
+
+# third-party project
+include_directories( AFTER "/root/my_envs/sqlite3/include")
+link_directories( AFTER "/root/my_envs/sqlite3/lib")
 
 set(IncludeDir
   ${REQUIRED_PACKAGES_INCLUDE}
@@ -55,4 +60,5 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
   "$<LINK_GROUP:RESCAN,${REQUIRED_PACKAGES}>" # no need to handle the dependency of requried_packages
   ${LLVM_COLLECTION}
   OpenMP::OpenMP_CXX
+  sqlite3
 )
