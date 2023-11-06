@@ -21,7 +21,9 @@ Module* ModuleLoader::loadModule(string filename, LLVMContext* context, SMDiagno
     unique_ptr<Module> M = parseIRFile(filename, *err, *context);
 
     if (M == NULL) {
-        cerr << "error loading file: " << filename << "'\n";
+        cerr << "error loading file: " << filename 
+             << ",because " << err->getMessage().str() 
+             << " at "<< err->getLineNo() << ": " << err->getLineContents().str() << "'\n";
         return nullptr;
     }
 
@@ -44,10 +46,10 @@ map<string, Module*>* ModuleLoader::loadModule(vector<string> filelist, LLVMCont
 
     int i = 0;
 
-    #pragma omp parallel for num_threads(10) private(err)
+    #pragma omp parallel for num_threads(10) private(err) // NOTE: all variable should be DEFINED in the for block, or it will be used as shared variable
     for (i = 0; i < filelist.size(); i++){
         string filename = filelist[i];
-        LLVMContext* context1 = new LLVMContext(); // TODO: parallel requires private context, but set arg-context causes segfault.
+        LLVMContext* context1 = new LLVMContext(); 
         (*ret)[filename] = this->loadModule(filename, context1, err);
         if (!slience && i % 500 == 0){
             cout << "." << flush;
