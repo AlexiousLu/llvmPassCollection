@@ -5,6 +5,7 @@
 #include <string>
 #include <iostream>
 #include <iterator>
+#include <json.hpp>
 #include "include_llvm.hh"
 
 
@@ -12,6 +13,7 @@
 namespace struct_tree{
 using namespace std;
 using namespace llvm;
+using namespace nlohmann;
 
 class Node {
 protected:
@@ -55,6 +57,10 @@ public:
     bool isLeafNode() {
         return this->children.empty();
     }
+
+    const map<K, V>& getChildren(){
+        return this->children;
+    }
 };
 
 template <typename K, typename V>
@@ -83,12 +89,34 @@ public:
     bool isLeafNode() {
         return this->children.empty();
     }
+
+    const vector<pair<K, V>>& getChildren(){
+        return this->children;
+    }
 };
 
 class RootNode;
 class ModuleNode;
 class StructNode;
 class MemberNode;
+
+
+class StructNode: public OrderedMappingNode<string, MemberNode*> {
+private:
+    string struct_name;
+    // vector<DIVariable> from_variable; //TODO: pending
+    // ModuleNode* parent_module; // ? TODO: why do I set this field?
+public:
+    StructNode(): OrderedMappingNode<string, MemberNode*>(STRUCT_NODE){}
+    StructNode(ModuleNode* m): StructNode(){ this->setParent((Node*)m); }
+
+    string getStructName(){ return struct_name; }
+    void setStructName(string struct_name) { this->struct_name = struct_name; }
+
+    // ModuleNode* getParentModule(){ return this->parent_module; }
+    // void setParentModule(ModuleNode* parent_module){ this->parent_module = parent_module; }
+
+};
 
 class MemberNode: public Node{
 private:
@@ -99,6 +127,7 @@ private:
     bool is_derived;
     bool is_basetype;
     StructNode* derived_pointer;
+    string derived_pointer_name; // for json recover;
 public:
     MemberNode(): Node(MEMBER_NODE){
         this->member_name = "";
@@ -138,39 +167,51 @@ public:
     StructNode* getDerivedPointer() { return this->derived_pointer; }
     void setDerivedPointer(StructNode* derived_pointer) { this->derived_pointer = derived_pointer; }
 
+    string toString() {
+        json res;
+        this->to_json(res, *this);
+        return res.dump();
+    }
+
+    void to_json(json& j, MemberNode& mn) {
+        j["member_name"] = this->member_name;
+        j["type_str"] = this->type_str;
+        j["size"] = this->size;
+        j["offset"] = this->offset;
+        j["is_derived"] = this->is_derived;
+        j["is_basetype"] = this->is_basetype;
+        j["derived_pointer"] = this->derived_pointer ? this->derived_pointer->getStructName() : "nullptr";
+    }
+
+    // standard `from_json` in json.hpp can't be used in class object now. 
+    // so here is a user-defined from_json to load from sqlite.
+    void from_json(const json& j, MemberNode& mn) {
+        mn.member_name = j["member_name"];
+        mn.type_str = j["type_str"];
+        mn.size = j["size"];
+        mn.offset = j["offset"];
+        mn.is_derived = j["is_derived"];
+        mn.is_basetype = j["is_basetype"];
+        mn.derived_pointer_name = j["derived_pointer"];
+    }
 };
 
-class StructNode: public OrderedMappingNode<string, MemberNode> {
-private:
-    string struct_name;
-    // vector<DIVariable> from_variable; //TODO: pending
-    // ModuleNode* parent_module; // ? TODO: why do I set this field?
-public:
-    StructNode(): OrderedMappingNode<string, MemberNode>(STRUCT_NODE){}
-    StructNode(ModuleNode* m): StructNode(){ this->setParent((Node*)m); }
-
-    string getStructName(){ return struct_name; }
-    void setStructName(string struct_name) { this->struct_name = struct_name; }
-
-    // ModuleNode* getParentModule(){ return this->parent_module; }
-    // void setParentModule(ModuleNode* parent_module){ this->parent_module = parent_module; }
-};
 
 
-class ModuleNode: public MappingNode<string, StructNode> {
+class ModuleNode: public MappingNode<string, StructNode*> {
 private:
     string module_name; // using full path as module_name
 public:
-    ModuleNode(): MappingNode<string, StructNode>(MODULE_NODE){}
+    ModuleNode(): MappingNode<string, StructNode*>(MODULE_NODE){}
     ModuleNode(RootNode* r): ModuleNode(){ this->setParent((Node*)r); }
 
     string getModuleName(){ return module_name; }
     void setModuleName(string module_name) { this->module_name = module_name; }
 };
 
-class RootNode: public MappingNode<string, ModuleNode> {
+class RootNode: public MappingNode<string, ModuleNode*> {
 public:
-    RootNode(): MappingNode<string, ModuleNode>(ROOT_NODE){}
+    RootNode(): MappingNode<string, ModuleNode*>(ROOT_NODE){}
 };
 
 

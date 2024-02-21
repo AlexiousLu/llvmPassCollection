@@ -7,8 +7,8 @@
 #include <optional>
 #include <variant>
 #include <json.hpp>
+#include <sqlite3.h>
 
-using json = nlohmann::ordered_json;
 using namespace std;
 using namespace llvm;
 using namespace struct_tree;
@@ -17,23 +17,24 @@ using namespace struct_tree;
 class StructExtracter {
 private:
 //  module_name: struct_name : field_name: {"type": xx, "otherinfo...."}
-    RootNode root;
+    RootNode* root;
 
     pair<string, DIType*> recurDerefPointer(DIDerivedType* pointer_def);
-    variant<MemberNode, StructNode> recurExtractType(DIType* struct_def, vector<string>& recursived_Ty_name, ModuleNode* curr_module_node);
+    variant<MemberNode*, StructNode*> recurExtractType(DIType* struct_def, vector<string>& recursived_Ty_name, ModuleNode* curr_module_node);
+    vector<string> member_to_record(MemberNode* member_node);
 public:
-    StructExtracter() {}
-    StructExtracter(RootNode r): root(r) {}
+    StructExtracter() { this->root = new RootNode(); }
+    StructExtracter(RootNode* r): root(r) {}
 
-    RootNode getTree(){ return this->root; };
+    RootNode* getTree(){ return this->root; };
 
-    ModuleNode extractModule(Module* module);
-    optional<StructNode> extractVariableDeclear(CallInst* CI, vector<string>& handled_Ty_name, ModuleNode* curr_module_node);
+    ModuleNode* extractModule(Module* module);
+    optional<StructNode*> extractVariableDeclear(CallInst* CI, vector<string>& handled_Ty_name, ModuleNode* curr_module_node);
     RootNode* extractModules(map<string, Module*>* modules);
 
-    RootNode loadFrom(string jsonfile);
+    RootNode* loadFromSqlite3(string sqlite3_path);
 
-    bool saveTo(string jsonfile, json* data, unsigned int indent=4);
+    bool saveToSqlite3(string sqlite3_path, RootNode* root=nullptr);
 
 };
 

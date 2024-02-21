@@ -33,7 +33,8 @@ list(TRANSFORM REQUIRED_PACKAGES PREPEND ../ OUTPUT_VARIABLE REQUIRED_PACKAGES_I
 list(TRANSFORM REQUIRED_PACKAGES_INCLUDE APPEND /include)
 
 
-# third-party project
+# third-party project - must be explicit include in cmake, 
+#     since compile_command(and clangd) will not include such projects indexed in PATH
 include_directories( AFTER "/root/my_envs/sqlite3/include")
 link_directories( AFTER "/root/my_envs/sqlite3/lib")
 

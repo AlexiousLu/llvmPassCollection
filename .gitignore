@@ -9,3 +9,8 @@ Lib/*
 
 test.*
 temp.*
+
+ikos_temp
+mlee_temp
+
+*.sqlite
