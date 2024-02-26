@@ -5,26 +5,24 @@
 
 int main(){
     ModuleLoader ml;
-    // map<string, Module*>* modules = ml.loadModules("./Data/linux_5.18bcs/bc.list", false);
-    Module* module = ml.loadModule("temp.ll");
+    // Module* module = ml.loadModule("test.ll");
+    // Module* module = ml.loadModule("/data/linux-stable-with-debug/net/wireless/.nl80211.o.ll");
+    // Module* module = ml.loadModule("/data/linux-stable-with-debug/drivers/mtd/nand/raw/.nand_onfi.o.ll");
+    // map<string, Module*>* fake_modules = new map<string, Module*>();
+    // (*fake_modules)["fake_module"] = module;
+
+    map<string, Module*>* modules = ml.loadModules("./Data/linux_5.18bcs/ll.list", false);
     
     StructExtracter se;
-    map<string, Module*>* fake_modules = new map<string, Module*>();
-    (*fake_modules)["fake_module"] = module;
-    RootNode* rn = se.extractModules(fake_modules);
-    se.saveToSqlite3("./struct_info.sqlite");
-
-    cout << (rn == (*rn)["fake_module"]->getParent()) << endl;
-    // cout << ((*rn)["fake_module"] == (*(*rn)["fake_module"])["s1"]->getParent()) << endl;
-    // cout << ((*(*rn)["fake_module"])["s1"] == (*(*(*rn)["fake_module"])["s1"])["a"]->getParent()) << endl;
+    // RootNode* rn = se.exModules(fake_modules);
+    RootNode* rn = se.exModules(modules);
+    se.saveToSqlite3("./struct_info_large.sqlite");
     
     cout << "finish" << endl;
 
-    json j = json::parse("{\"derived_pointer\":\"nullptr\",\"is_basetype\":true,\"is_derived\":false,\"member_name\":\"a\",\"offset\":0,\"size\":4,\"type_str\":\"int\"}");
-    cout << j.size() << endl;
-    MemberNode mn;
-    mn.from_json(j, mn);
-    cout << mn.toString() << endl;
-
+    // se.loadFromSqlite3("./struct_info_large.sqlite");
+    // rn = se.getTree();
+    // cout << (rn == (*rn)["test.c"]->getParent()) << endl;
+    // cout << "finish" << endl;
 
 }

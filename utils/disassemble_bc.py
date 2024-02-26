@@ -1,6 +1,6 @@
 import os
 from multiprocessing.pool import Pool
-bc_list = "./Data/linux_5.18bcs/bc.list"
+bc_list = "./Data/linux_5.18bcs_noinline/bc.list"
 
 if __name__ == "__main__":
     p = Pool(30)

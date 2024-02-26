@@ -9,7 +9,7 @@
 #include "include_llvm.hh"
 
 
-//TODO: iterator.
+// pending: iterator.
 namespace struct_tree{
 using namespace std;
 using namespace llvm;
@@ -37,8 +37,6 @@ public:
     bool isRootNode() { return this->node_type == ROOT_NODE; }
     bool isModuleNode() { return this->node_type == MODULE_NODE; }
     bool isStructNode() { return this->node_type == STRUCT_NODE; }
-
-    //TODO: iterator<typename Category, typename Tp> traverse {};
 };
 
 template <typename K, typename V>
@@ -46,7 +44,7 @@ class MappingNode: public Node{
 private:
     map<K, V> children;
 protected:
-    MappingNode(unsigned char t): Node(t){}
+    MappingNode(unsigned char t): Node(t) { children = map<K, V>(); }
 public:
     V& operator[](const K& key){
         return this->children[key];
@@ -56,6 +54,10 @@ public:
     }
     bool isLeafNode() {
         return this->children.empty();
+    }
+
+    bool has(const K& key) {
+        return this->children.find(key) != this->children.end();
     }
 
     const map<K, V>& getChildren(){
@@ -68,18 +70,17 @@ class OrderedMappingNode: public Node{
 private:
     vector<pair<K, V>> children;
 protected:
-    OrderedMappingNode(unsigned char t): Node(t){}
+    OrderedMappingNode(unsigned char t): Node(t) { children = vector<pair<K, V>>(); }
 public:
     V& operator[](const K& key){
-        for(auto it = this->children.begin(); it != this->children.end(); it++){
-            if(it->first == key){
-                return it->second;
+        if (!this->children.empty()) {
+            for(auto it = this->children.begin(); it != this->children.end(); it++){
+                if(it->first == key){
+                    return it->second;
+                }
             }
         }
         this->children.push_back({key, V{}});
-        // if(is_base_of<V, Node>::value){
-            
-        // }
         return std::prev(this->children.end())->second;
     }
     V& getChild(const K& key){
@@ -88,6 +89,10 @@ public:
 
     bool isLeafNode() {
         return this->children.empty();
+    }
+
+    bool has(const K& key) {
+        return std::find(this->children.begin(), this->children.end(), key) != this->children.end();
     }
 
     const vector<pair<K, V>>& getChildren(){
@@ -104,8 +109,6 @@ class MemberNode;
 class StructNode: public OrderedMappingNode<string, MemberNode*> {
 private:
     string struct_name;
-    // vector<DIVariable> from_variable; //TODO: pending
-    // ModuleNode* parent_module; // ? TODO: why do I set this field?
 public:
     StructNode(): OrderedMappingNode<string, MemberNode*>(STRUCT_NODE){}
     StructNode(ModuleNode* m): StructNode(){ this->setParent((Node*)m); }
@@ -124,30 +127,33 @@ private:
     string type_str;
     uint64_t size;
     uint64_t offset;
-    bool is_derived;
+    bool is_derived_struct;
     bool is_basetype;
-    StructNode* derived_pointer;
-    string derived_pointer_name; // for json recover;
+    StructNode* derived_struct_pointer;
+    string derived_struct_name; // for json recover;
 public:
     MemberNode(): Node(MEMBER_NODE){
         this->member_name = "";
         this->type_str = "";
-        this->is_derived = false;
+        this->is_derived_struct = false;
         this->is_basetype = false;
-        this->derived_pointer=nullptr; 
+        this->derived_struct_pointer=nullptr; 
     }
     MemberNode(StructNode* s): MemberNode(){ this->setParent((Node*)s); } 
     MemberNode(string member_name, string type_str, unsigned char der_base=0): Node(MEMBER_NODE) {
         this->member_name = member_name;
         this->type_str = type_str;
-        this->is_derived = der_base == 0 ? false : true;
+        this->is_derived_struct = der_base == 0 ? false : true;
         this->is_basetype = der_base == 0 ? true : false;
+    }
+    MemberNode(json j): Node(MEMBER_NODE) {
+        from_json(j, *this);
     }
     
     bool isLeafNode() { return true; }
 
-    bool isDerived(){ return this->is_derived; }
-    void setDerived(bool is_derived) { this->is_derived = is_derived; }
+    bool isDerivedStruct(){ return this->is_derived_struct; }
+    void setDerivedStruct(bool is_derived_struct) { this->is_derived_struct = is_derived_struct; }
 
     bool isBaseType(){ return this->is_basetype; }
     void setBaseType(bool is_basetype) { this->is_basetype = is_basetype; }
@@ -164,8 +170,11 @@ public:
     uint64_t getOffset() { return this->offset; }
     void setOffset(uint64_t offset) { this->offset = offset; }
 
-    StructNode* getDerivedPointer() { return this->derived_pointer; }
-    void setDerivedPointer(StructNode* derived_pointer) { this->derived_pointer = derived_pointer; }
+    StructNode* getDerivedStructPointer() { return this->derived_struct_pointer; }
+    void setDerivedStructPointer(StructNode* derived_pointer) { this->derived_struct_pointer = derived_pointer; }
+
+    string getDerivedStructName() { return this->derived_struct_name; }
+    void setDerivedStructName(string derived_struct_name) { this->derived_struct_name = derived_struct_name; }
 
     string toString() {
         json res;
@@ -178,9 +187,9 @@ public:
         j["type_str"] = this->type_str;
         j["size"] = this->size;
         j["offset"] = this->offset;
-        j["is_derived"] = this->is_derived;
+        j["is_derived"] = this->is_derived_struct;
         j["is_basetype"] = this->is_basetype;
-        j["derived_pointer"] = this->derived_pointer ? this->derived_pointer->getStructName() : "nullptr";
+        j["derived_pointer"] = this->derived_struct_pointer ? this->derived_struct_pointer->getStructName() : "nullptr";
     }
 
     // standard `from_json` in json.hpp can't be used in class object now. 
@@ -190,9 +199,9 @@ public:
         mn.type_str = j["type_str"];
         mn.size = j["size"];
         mn.offset = j["offset"];
-        mn.is_derived = j["is_derived"];
+        mn.is_derived_struct = j["is_derived"];
         mn.is_basetype = j["is_basetype"];
-        mn.derived_pointer_name = j["derived_pointer"];
+        mn.derived_struct_name = j["derived_pointer"];
     }
 };
 

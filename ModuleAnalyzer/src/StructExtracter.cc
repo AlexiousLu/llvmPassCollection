@@ -1,147 +1,213 @@
 #include <StructExtracter.hh>
 
-pair<string, DIType*> StructExtracter::recurDerefPointer(DIDerivedType* pointer_def){
-    // struct_abc ****a -> "struct_abc****", struct_abc(non-pointer type) 
-    assert((pointer_def->getTag() == dwarf::DW_TAG_pointer_type));
-    DIType * base_Ty = pointer_def->getBaseType();
-    if(base_Ty->getTag() == dwarf::DW_TAG_pointer_type){
-        DIDerivedType* base_ptr_def = dyn_cast<DIDerivedType>(base_Ty);
-        return pair<string, DIType*>(this->recurDerefPointer(base_ptr_def).first + "*", this->recurDerefPointer(base_ptr_def).second);
-    } else {
-        return pair<string, DIType*>(base_Ty->getName().str() + "*", base_Ty);
+
+/*
+exType                <--|
+  |                      |
+  |-->  exDerivedType  --|
+  |--> exCompositeType --|
+  |-->   exBasicType   --|
+
+*/
+
+
+void StructExtracter::exDerivedType(DIDerivedType* derived_type, ExtractInfo& info) {
+    switch (derived_type->getTag()) {
+        default: throw; // todo
+        case dwarf::DW_TAG_member: // member should only enter once each member
+            if ((info.curr_member_node != nullptr && derived_type->getName().str() != "" &&
+                 info.curr_member_node->getMemberName() == derived_type->getName().str()) 
+              || info.curr_struct_node == nullptr) 
+                throw;
+            info.curr_member_node = new MemberNode(info.curr_struct_node);
+            (*info.curr_struct_node)[derived_type->getName().str()] = info.curr_member_node;
+            info.curr_member_node->setMemberName(derived_type->getName().str());
+            info.curr_member_node->setSize(derived_type->getSizeInBits());
+            info.curr_member_node->setOffset(derived_type->getOffsetInBits());
+            info.curr_member_node->setDerivedStructName(derived_type->getScope()->getName().str());
+            return exType(derived_type->getBaseType(), info); // finish typestr
+        case dwarf::DW_TAG_pointer_type:
+            if (info.curr_member_node != nullptr) {
+                if (derived_type->getBaseType() == nullptr) {
+                    info.curr_member_node->setTypeStr(info.curr_member_node->getTypeStr() + "void *");
+                    return;
+                } else {
+                    info.curr_member_node->setTypeStr(info.curr_member_node->getTypeStr() + "*");
+                }
+            }
+            if (derived_type->getBaseType() == nullptr) return;
+            return exType(derived_type->getBaseType(), info);
+        case dwarf::DW_TAG_const_type:
+        case dwarf::DW_TAG_typedef:
+        case dwarf::DW_TAG_volatile_type:
+            if (derived_type->getBaseType() == nullptr) {
+                if (info.curr_member_node != nullptr) 
+                    info.curr_member_node->setTypeStr("null" + info.curr_member_node->getTypeStr());
+                return;
+            }
+            return exType(derived_type->getBaseType(), info);
     }
+}
+
+void StructExtracter::exCompositeType(DICompositeType* composite_type, ExtractInfo& info) {
+    switch (composite_type->getTag()) {
+        default: throw;
+        case dwarf::DW_TAG_structure_type:
+        {
+            if(info.curr_member_node != nullptr) { // sturct as end of a member recursive -> finish type str.
+                info.curr_member_node->setTypeStr(
+                    "struct " + composite_type->getName().str() + info.curr_member_node->getTypeStr()
+                );
+                info.curr_member_node->setDerivedStruct(true);
+            }
+            // add this struct to curr module (if there is a same struct, skip)
+            if (info.curr_module_node->has(composite_type->getName().str())) {
+                return;
+            }
+            ExtractInfo old_info = ExtractInfo(info);
+            ExtractInfo new_info = ExtractInfo(info.curr_module_node);
+            new_info.curr_struct_node = new StructNode(info.curr_module_node);
+            new_info.curr_struct_node->setStructName(composite_type->getName().str());
+            (*info.curr_module_node)[composite_type->getName().str()] = new_info.curr_struct_node;
+            for (auto member : composite_type->getElements()) {
+                if (DIDerivedType* mem_type = dyn_cast<DIDerivedType>(member)) {
+                    exType(mem_type, new_info);
+                } else {
+                    throw;
+                }
+            }
+            return;
+        }
+        case dwarf::DW_TAG_union_type: // treat union like struct (the union member as struct members) TODO: merge
+        {
+            if(info.curr_member_node != nullptr) { // union as end of a member recursive -> finish type str.
+                info.curr_member_node->setTypeStr(
+                    "union " + composite_type->getName().str() + info.curr_member_node->getTypeStr()
+                );
+                info.curr_member_node->setDerivedStruct(true);
+            }
+
+            // add union's member to curr module, skip if exists.
+            if (info.curr_module_node->has(composite_type->getName().str())) {
+                return;
+            }
+            ExtractInfo old_info = ExtractInfo(info);
+            ExtractInfo new_info = ExtractInfo(info.curr_module_node);
+            new_info.curr_struct_node = new StructNode(info.curr_module_node);
+            new_info.curr_struct_node->setStructName(composite_type->getName().str());
+            (*info.curr_module_node)[composite_type->getName().str()] = new_info.curr_struct_node;
+            for (auto member : composite_type->getElements()) {
+                if (DIDerivedType* mem_type = dyn_cast<DIDerivedType>(member)) {
+                    exType(mem_type, new_info);
+                } else {
+                    throw;
+                }
+            }
+            return;
+        }
+        case dwarf::DW_TAG_array_type:
+        {
+            if(info.curr_member_node != nullptr) { // array as end of a member recursive -> finish type str.
+                string array_len = "";
+                if(DISubrange* len = dyn_cast<DISubrange>(composite_type->getElements()[0])){
+                    array_len = to_string(len->getCount().get<ConstantInt*>()->getSExtValue());
+                };
+                exType(composite_type->getBaseType(), info); // finish type_str
+                info.curr_member_node->setTypeStr(info.curr_member_node->getTypeStr() + "[" + array_len + "]");
+            } else { // var declearation outside a struct member;
+                exType(composite_type->getBaseType(), info);
+            }
+            return;
+        }
+        case dwarf::DW_TAG_enumeration_type:
+            exType(composite_type->getBaseType(), info); // skip enum name.
+            return;
+
+    }
+}
+
+void StructExtracter::exBasicType(DIBasicType* base_type, ExtractInfo& info) {
+    if (info.curr_member_node != nullptr) {
+        info.curr_member_node->setBaseType(true);
+        info.curr_member_node->setTypeStr(base_type->getName().str() + info.curr_member_node->getTypeStr());
+    }
+    return;
 }
 
 
 
-
-variant<MemberNode*, StructNode*> StructExtracter::recurExtractType(DIType* Ty_def, vector<string>& recursived_Ty_name, ModuleNode* curr_module_node){
-    // for each field (DIDerivedType), check whether it's another struct_def (DICompositeType), if so, recurse it to add a new node under module_node.
-    // DIType has 5 subclass: DIBasicType, DICompositeType, DIDerivedType, DIStringType, DISubroutineType. handle them one by one.
-
-    switch(Ty_def->getMetadataID()){
-        default:
-            throw;
-        case Metadata::DIBasicTypeKind: // int, float, etc...
+void StructExtracter::exType(DIType* type, ExtractInfo& info){
+    switch (type->getMetadataID()) {
+        default: throw;
+        case Metadata::DIDerivedTypeKind:
         {
-            MemberNode* res = new MemberNode();
-            res->setBaseType(true);
-            res->setTypeStr(Ty_def->getName().str()); 
-            return res; // name should be set in DW_TAG_member-step
+            DIDerivedType* derived_type = dyn_cast<DIDerivedType>(type);
+            exDerivedType(derived_type, info);
+            return;
         }
-        case Metadata::DIDerivedTypeKind: // pointer, member, etc... 
+        case Metadata::DICompositeTypeKind:
         {
-            DIDerivedType* DerTy = dyn_cast<DIDerivedType>(Ty_def);
-            switch(DerTy->getTag()){
-                default:
-                    throw;
-                case dwarf::DW_TAG_member:
-                {
-                    auto node = this->recurExtractType(DerTy->getBaseType(), recursived_Ty_name, curr_module_node);
-                    MemberNode* res = new MemberNode(); 
-                    if(StructNode** sn = get_if<StructNode*>(&node)){ // member is a in-place, non-pointer struct and return a struct node.
-                        // attach this struct to module
-                        (*sn)->setParent(curr_module_node);
-                        (*curr_module_node)[(*sn)->getStructName()] = *sn;
-                        res->setDerived(true);
-                        res->setDerivedPointer(*sn);
-                        res->setTypeStr((*sn)->getStructName());
-                    } else if (MemberNode** mn = get_if<MemberNode*>(&node)){ // member is a base type or a pointer;
-                        res = *mn;
-                    } else {
-                        throw;
-                    }
-                    res->setMemberName(DerTy->getName().str());
-                    res->setSize(DerTy->getSizeInBits());
-                    res->setOffset(DerTy->getOffsetInBits());
-                    return res;
-                }
-                case dwarf::DW_TAG_pointer_type: // "member_name" is set in DW_TAG_member "case";
-                {
-                    MemberNode* res = new MemberNode();
-                    pair<string, DIType*> ptr_res = this->recurDerefPointer(DerTy);
-                    res->setTypeStr(ptr_res.first);
-                    if(ptr_res.second->getMetadataID() == Metadata::DIBasicTypeKind){
-                        res->setBaseType(true);
-                        return res;
-                    } else { // point to a composite type
-                        string deref_type_str = ptr_res.first; // after c++11 it's a "deepcopy"(alloc and copy)
-                        deref_type_str.erase(remove(deref_type_str.begin(), deref_type_str.end(), '*'), deref_type_str.end()); // standard usage to eliminate the last '*'
-                        StructNode* recur_struct_node = get<StructNode*>(this->recurExtractType(ptr_res.second, recursived_Ty_name, curr_module_node));
-                        recur_struct_node->setParent(curr_module_node);
-                        (*curr_module_node)[deref_type_str] = recur_struct_node;
-                        
-                        res->setDerived(true);
-                        res->setDerivedPointer((*curr_module_node)[deref_type_str]);
-                        return res;
-                    }
-                }
-            }
+            DICompositeType* composite_type = dyn_cast<DICompositeType>(type);
+            exCompositeType(composite_type, info);
+            return;
         }
-        case Metadata::DICompositeTypeKind: // struct, array, etc...
+        case Metadata::DIBasicTypeKind:
         {
-            DICompositeType* ComTy = dyn_cast<DICompositeType>(Ty_def);
-            string Ty_name = ComTy->getName().str();
-            switch(ComTy->getTag()){
-                default:
-                    throw;
-                case dwarf::DW_TAG_structure_type:
-                    StructNode* res = new StructNode();
-                    res->setStructName(Ty_name);
-                    for(auto element : ComTy->getElements()){
-                        if(DIType* eleTy = dyn_cast<DIType>(element)){
-                            variant<MemberNode*, StructNode*> ele_node = this->recurExtractType(eleTy, recursived_Ty_name, curr_module_node);
-                            
-                            if(MemberNode** member_node = get_if<MemberNode*>(&ele_node)){
-                                (*member_node)->setParent(res);
-                                (*res)[(*member_node)->getMemberName()] = *member_node;
-                            } else {
-                                throw; // must return a membernode;
-                            }
-                        } else {
-                            throw; // unexpected situation.
-                        }
-                    }
-                    return res;
+            DIBasicType* base_type = dyn_cast<DIBasicType>(type);
+            exBasicType(base_type, info);
+            return;
+        }
+        case Metadata::DISubroutineTypeKind: // function pointer -> treat as base type 
+        {
+            if (info.curr_member_node != nullptr) {
+                info.curr_member_node->setBaseType(true);
+                info.curr_member_node->setTypeStr("RESERVED: function pointer" + info.curr_member_node->getTypeStr());
             }
+            return;
         }
     }
 }
 
-optional<StructNode*> StructExtracter::extractVariableDeclear(CallInst* variable_declear, vector<string>& handled_Ty_name, ModuleNode* curr_module_node){
+optional<StructNode*> StructExtracter::exVarDeclear(CallInst* variable_declear, ModuleNode* curr_module_node){
     if(!(variable_declear->getCalledFunction()->isIntrinsic()) || 
          variable_declear->getCalledFunction()->getName() != "llvm.dbg.declare"){ //directly getName cause segfault
         return nullopt;
     }
 
     StructNode* res = new StructNode();
-    for(auto arg = variable_declear->arg_begin(); arg != variable_declear->arg_end(); arg++){
+    ExtractInfo* info = new ExtractInfo(curr_module_node);
+    for(auto arg = variable_declear->arg_begin(); arg != variable_declear->arg_end(); arg++) {
         if(MetadataAsValue* mav = dyn_cast<MetadataAsValue>(arg)){
             // giving type of each variable declear (global && local) into recurExtractStruct.
             if(DILocalVariable* local_var = dyn_cast<DILocalVariable>(mav->getMetadata())){
-                DIType* base_Ty = local_var->getType();
-                if(base_Ty->getTag() == dwarf::DW_TAG_pointer_type){
-                    base_Ty = this->recurDerefPointer(dyn_cast<DIDerivedType>(base_Ty)).second;
-                }
-                if(base_Ty->getTag() == dwarf::DW_TAG_structure_type){
-                    string struct_name = base_Ty->getName().str();
-                    res = get<StructNode*>(this->recurExtractType(base_Ty, handled_Ty_name, curr_module_node)); // must return a value
-                    return res;
-                } else {
-                    return nullopt; // FIXME: not only handle with struct.
-                }
-            } else if (DIGlobalVariable* global_var = dyn_cast<DIGlobalVariable>(mav->getMetadata())) {
-                ;;;;;;
+                local_var->printAsOperand(errs(), variable_declear->getModule()); errs() << "\n";
+                DIType* var_type = local_var->getType();
+                exType(var_type, *info);
+                // if(var_type->getTag() == dwarf::DW_TAG_pointer_type){
+                //     var_type = this->exDerivedType(dyn_cast<DIDerivedType>(var_type)).second;
+                // }
+                // if(var_type->getTag() == dwarf::DW_TAG_structure_type){
+                //     string struct_name = var_type->getName().str();
+                //     res = get<StructNode*>(this->exType(var_type, curr_module_node)); // must return a value
+                //     return res;
+                // } else {
+                //     return nullopt; // FIXME: not only handle with struct.
+                // }
+            } else if (DIGlobalVariable* global_var = dyn_cast<DIGlobalVariable>(mav->getMetadata())) { // todo
+                cout << "a global var found" << endl;
             }
         }
     }
     return res;
 }
 
-ModuleNode* StructExtracter::extractModule(Module* module){
+ModuleNode* StructExtracter::exModule(Module* module){
     ModuleNode* res = new ModuleNode();
     // using filename in compile Unit as module name.
-    
+    if (!module->getNamedMetadata("llvm.dbg.cu")) {
+        cerr << "No dbg info in module: " << module->getName().str() << endl;
+        return nullptr;
+    }
     if(module->getNamedMetadata("llvm.dbg.cu")->getNumOperands() != 1){
         throw;
     }
@@ -151,16 +217,11 @@ ModuleNode* StructExtracter::extractModule(Module* module){
     } else {
         throw;
     };
-    vector<string> handled_Ty_name; // same_struct from same module will be extracted only once. TODO: maybe could be deleted
     for(Module::iterator f = module->begin(), fe = module->end(); f != fe; f++){
         for (inst_iterator i = inst_begin(*f), ie = inst_end(*f); i != ie; ++i){
             if(CallInst* CI = dyn_cast<CallInst>(&*i)){
                 if(CI->getCalledFunction() != nullptr){ // idk why calledfFunction could be nullptr
-                    if(optional<StructNode*> temp_res = this->extractVariableDeclear(CI, handled_Ty_name, res)){ // nullptr means CI is irrelevant to struct definition
-                        StructNode* sn = temp_res.value();
-                        sn->setParent(res);
-                        (*res)[sn->getStructName()] = sn;
-                    }
+                    this->exVarDeclear(CI, res);
                 }
             }
         }
@@ -168,56 +229,84 @@ ModuleNode* StructExtracter::extractModule(Module* module){
     return res;
 }
 
-RootNode* StructExtracter::extractModules(map<string, Module*>* modules){
+RootNode* StructExtracter::exModules(map<string, Module*>* modules){
     for(auto pair : *modules){
         if(pair.second == nullptr){
             cerr << "Cannot got module for " << pair.first;
         } else {
             cout << "Extracting " << pair.first << endl;
-            ModuleNode* mn = this->extractModule(pair.second);
-            mn->setParent(this->root);
-            (*this->root)[pair.first] = mn;
+            ModuleNode* mn = this->exModule(pair.second);
+            if (mn != nullptr) {
+                mn->setParent(this->root);
+                (*this->root)[pair.first] = mn;
+            } else {
+                continue;
+            }
         }
     }
     return this->root;
 }
 
-
-vector<string> StructExtracter::member_to_record(MemberNode* member_node){
-    string module_name = ((ModuleNode*)(member_node->getParent()->getParent()))->getModuleName();
-    string struct_name = ((StructNode*)(member_node->getParent()))->getStructName();
-    string compressed_member_name = member_node->toString();
-
-    return {module_name, struct_name, compressed_member_name};
-}
-
 RootNode* StructExtracter::loadFromSqlite3(string sqlite3_path){
-    // json * res = new json();
-    // ifstream inf(jsonfile);
-    // if(!inf.fail()){
-    //     *res = json::parse(inf);
-    //     return res;
-    // } else {
-    //     return nullptr;
-    // }
-    return new RootNode(); // TODO: pending.
+    if (!filesystem::exists(sqlite3_path)) {
+        cerr << "sqlite does not exist: " << sqlite3_path << endl;
+        return nullptr;
+    }
+    sqlite3 *db;
+    int ret = sqlite3_open(sqlite3_path.c_str(),&db);
+    if (ret != SQLITE_OK) {
+		cerr << "open db" << sqlite3_path << "error!" << endl;
+		return nullptr;
+	}
+    
+    const string sql_str = "select MODULE_NAME, STRUCT_NAME, MEMBER_NODE_STR from STRUCT_INFO";
+    sqlite3_stmt *stmt = NULL;
+    int result = sqlite3_prepare(db, sql_str.c_str(), -1, &stmt, NULL);
+    if (result != SQLITE_OK) {
+        cerr << "Wrong sqlite3 statment: " << sql_str << endl;
+        sqlite3_close(db);
+        return nullptr;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const unsigned char * module_name_cstr = sqlite3_column_text(stmt, 0);
+        string module_name((char*)module_name_cstr);
+        const unsigned char * struct_name_cstr = sqlite3_column_text(stmt, 1);
+        string struct_name((char*)struct_name_cstr);
+        const unsigned char * member_node_str_cstr = sqlite3_column_text(stmt, 2);
+        string member_node_str((char*)member_node_str_cstr);
+
+        json j_member_node = json::parse(member_node_str);
+        ModuleNode* mn = new ModuleNode();
+        StructNode* sn = new StructNode();
+        MemberNode* memn = new MemberNode(j_member_node);
+
+        auto modules = this->root->getChildren();
+        if (modules.find(module_name) == modules.end()) {
+            mn->setParent(this->root);
+            (*this->root)[module_name] = mn;
+        }
+        auto structs = (*this->root)[module_name]->getChildren();
+        if (structs.find(struct_name) == structs.end()) {
+            sn->setParent((*this->root)[module_name]);
+            (*(*this->root)[module_name])[struct_name] = sn;
+        }
+        memn->setParent((*(*this->root)[module_name])[struct_name]);
+        (*(*(*this->root)[module_name])[struct_name])[memn->getMemberName()] = memn;    
+    }
+    sqlite3_finalize(stmt); sqlite3_close(db);
+    return this->root;
 }
 
 bool StructExtracter::saveToSqlite3(string sqlite3_path, RootNode* root){
-    if (root == nullptr){
-        root = this->root;
-    }
+    if (root == nullptr) root = this->root;
 
-    if (filesystem::exists(sqlite3_path)){
-        filesystem::remove(sqlite3_path);
-    }
+    if (filesystem::exists(sqlite3_path)) filesystem::remove(sqlite3_path);
 
-	sqlite3 *db;
-	int ret = 0;
-
-	if ((ret = sqlite3_open(sqlite3_path.c_str(),&db)) != SQLITE_OK)
-	{
-		cerr << "open error!" << endl;
+	sqlite3 *db; int ret = 0;
+    ret = sqlite3_open(sqlite3_path.c_str(),&db);
+	if (ret != SQLITE_OK) {
+		cerr << "open db " << sqlite3_path << "error!" << endl; 
 		return false;
 	}
 
@@ -225,13 +314,14 @@ bool StructExtracter::saveToSqlite3(string sqlite3_path, RootNode* root){
     const char* sql_str = "CREATE TABLE STRUCT_INFO("
                             "MODULE_NAME            VARCHAR(1024)  NOT NULL,"
                             "STRUCT_NAME            VARCHAR(128)   NOT NULL,"
-                            "MEMBER_COMPRESSED_NAME VARCHAR(2048)  NOT NULL,"
-                            "PRIMARY KEY (MODULE_NAME, STRUCT_NAME, MEMBER_COMPRESSED_NAME) );";
+                            "MEMBER_NODE_STR        VARCHAR(2048)  NOT NULL,"
+                            "PRIMARY KEY (MODULE_NAME, STRUCT_NAME, MEMBER_NODE_STR) );";
     char* errMsg = 0;
     int (*f)(void *, int, char **, char **) = [](void *, int, char **, char **) -> int {return 0;};
 
-    if((ret = sqlite3_exec(db,sql_str,nullptr,0,&errMsg)) != SQLITE_OK){
-        cerr << "create table error" << errMsg << endl;
+    ret = sqlite3_exec(db,sql_str,nullptr,0,&errMsg);
+    if(ret != SQLITE_OK) {
+        cerr << "create table error: " << errMsg << endl;
         return false;
     }
 

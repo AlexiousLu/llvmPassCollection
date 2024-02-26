@@ -13,24 +13,34 @@ using namespace std;
 using namespace llvm;
 using namespace struct_tree;
 
+class ExtractInfo { // an info for a MEMBER of struct;
+public:
+    ModuleNode* curr_module_node = nullptr;
+    StructNode* curr_struct_node = nullptr;
+    MemberNode* curr_member_node = nullptr;
+    ExtractInfo() {};
+    ExtractInfo(ModuleNode* mn) { curr_module_node = mn; };
+};
+
 //extract all structures from modules, only the newest extract would be valid.
 class StructExtracter {
 private:
 //  module_name: struct_name : field_name: {"type": xx, "otherinfo...."}
     RootNode* root;
 
-    pair<string, DIType*> recurDerefPointer(DIDerivedType* pointer_def);
-    variant<MemberNode*, StructNode*> recurExtractType(DIType* struct_def, vector<string>& recursived_Ty_name, ModuleNode* curr_module_node);
-    vector<string> member_to_record(MemberNode* member_node);
+    void exDerivedType(DIDerivedType* derived_type, ExtractInfo& info);
+    void exCompositeType(DICompositeType* composite_type, ExtractInfo& info);
+    void exBasicType(DIBasicType* base_type, ExtractInfo& info);
+    void exType(DIType* type, ExtractInfo& info);
 public:
     StructExtracter() { this->root = new RootNode(); }
     StructExtracter(RootNode* r): root(r) {}
 
     RootNode* getTree(){ return this->root; };
 
-    ModuleNode* extractModule(Module* module);
-    optional<StructNode*> extractVariableDeclear(CallInst* CI, vector<string>& handled_Ty_name, ModuleNode* curr_module_node);
-    RootNode* extractModules(map<string, Module*>* modules);
+    ModuleNode* exModule(Module* module);
+    optional<StructNode*> exVarDeclear(CallInst* CI, ModuleNode* curr_module_node);
+    RootNode* exModules(map<string, Module*>* modules);
 
     RootNode* loadFromSqlite3(string sqlite3_path);
 
