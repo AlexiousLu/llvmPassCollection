@@ -135,7 +135,6 @@ void StructExtracter::exBasicType(DIBasicType* base_type, ExtractInfo& info) {
 }
 
 
-
 void StructExtracter::exType(DIType* type, ExtractInfo& info){
     switch (type->getMetadataID()) {
         default: throw;
@@ -167,6 +166,7 @@ void StructExtracter::exType(DIType* type, ExtractInfo& info){
         }
     }
 }
+
 
 optional<StructNode*> StructExtracter::exVarDeclear(CallInst* variable_declear, ModuleNode* curr_module_node){
     if(!(variable_declear->getCalledFunction()->isIntrinsic()) || 
@@ -201,6 +201,7 @@ optional<StructNode*> StructExtracter::exVarDeclear(CallInst* variable_declear, 
     return res;
 }
 
+
 ModuleNode* StructExtracter::exModule(Module* module){
     ModuleNode* res = new ModuleNode();
     // using filename in compile Unit as module name.
@@ -228,6 +229,7 @@ ModuleNode* StructExtracter::exModule(Module* module){
     }
     return res;
 }
+
 
 RootNode* StructExtracter::exModules(map<string, Module*>* modules){
     for(auto pair : *modules){
@@ -259,7 +261,7 @@ RootNode* StructExtracter::loadFromSqlite3(string sqlite3_path){
 		return nullptr;
 	}
     
-    const string sql_str = "select MODULE_NAME, STRUCT_NAME, MEMBER_NODE_STR from STRUCT_INFO";
+    const string sql_str = "select module_name, struct_name, member_node_str from STRUCT_INFO";
     sqlite3_stmt *stmt = NULL;
     int result = sqlite3_prepare(db, sql_str.c_str(), -1, &stmt, NULL);
     if (result != SQLITE_OK) {
@@ -312,10 +314,10 @@ bool StructExtracter::saveToSqlite3(string sqlite3_path, RootNode* root){
 
     //create table
     const char* sql_str = "CREATE TABLE STRUCT_INFO("
-                            "MODULE_NAME            VARCHAR(1024)  NOT NULL,"
-                            "STRUCT_NAME            VARCHAR(128)   NOT NULL,"
-                            "MEMBER_NODE_STR        VARCHAR(2048)  NOT NULL,"
-                            "PRIMARY KEY (MODULE_NAME, STRUCT_NAME, MEMBER_NODE_STR) );";
+                            "module_name       VARCHAR(1024)  NOT NULL,"
+                            "struct_name       VARCHAR(128)   NOT NULL,"
+                            "member_node_str   VARCHAR(2048)  NOT NULL,"
+                            "PRIMARY KEY (module_name, struct_name, member_node_str) );";
     char* errMsg = 0;
     int (*f)(void *, int, char **, char **) = [](void *, int, char **, char **) -> int {return 0;};
 
@@ -345,5 +347,88 @@ bool StructExtracter::saveToSqlite3(string sqlite3_path, RootNode* root){
     }
 
     sqlite3_close(db);
+    return true;
+}
+
+RootNode* StructExtracter::loadFromMysql(string config_file, string table_name) {
+    if (!filesystem::exists(config_file)) {
+        cerr << "Mysql config does not exist: " << config_file << endl;
+        return nullptr;
+    }
+
+	MYSQL* db = mysql::mysql_connect(config_file);
+	if (!db) { return nullptr; }
+
+    vector<string> columns = {"module_name", "struct_name", "member_node_str"};
+    mysql::MysqlResult* map_res = mysql::mysql_select(db, table_name, columns, "", true);
+    if (!map_res) { return nullptr; };
+
+    for (auto map_raw : map_res->data) {
+        string module_name = map_raw["module_name"];
+        string struct_name = map_raw["struct_name"];
+        string member_node_str = map_raw["member_node_str"];
+
+        json j_member_node = json::parse(member_node_str);
+        ModuleNode* mn = new ModuleNode();
+        StructNode* sn = new StructNode();
+        MemberNode* memn = new MemberNode(j_member_node);
+
+        auto& modules = this->root->getChildren();
+        if (modules.find(module_name) == modules.end()) {
+            mn->setParent(this->root);
+            (*this->root)[module_name] = mn;
+        }
+        auto& structs = (*this->root)[module_name]->getChildren();
+        if (structs.find(struct_name) == structs.end()) {
+            sn->setParent((*this->root)[module_name]);
+            (*(*this->root)[module_name])[struct_name] = sn;
+        }
+        memn->setParent((*(*this->root)[module_name])[struct_name]);
+        (*(*(*this->root)[module_name])[struct_name])[memn->getMemberName()] = memn; 
+    }
+
+    free(map_res); mysql_close(db);
+    return this->root;
+
+}
+
+bool StructExtracter::saveToMysql(string config_file, string table_name, RootNode* root) {
+    if (root == nullptr) root = this->root;
+
+    if (filesystem::exists(config_file)) {
+        cout << "Could not find mysql config file: " << config_file << endl;
+    }
+
+	MYSQL* db = mysql::mysql_connect(config_file);
+	if (!db) { return false; }
+    
+    vector<string> columns = {
+        "module_name VARCHAR(1024)  NOT NULL",
+        "struct_name VARCHAR(128)   NOT NULL",
+        "member_node_str VARCHAR(2048)  NOT NULL",
+    };
+    vector<string> pks = {
+        "PRIMARY KEY (module_name, struct_name, member_node_str)"
+    };
+
+    if (!mysql::mysql_create_table(db, "struct_info", columns, pks, "")){
+        return false;
+    };
+
+    for (pair<string, ModuleNode*> rc : root->getChildren()){
+        ModuleNode* mn = rc.second;
+        for (pair<string, StructNode*> mc : mn->getChildren()){
+            StructNode* sn = mc.second;
+            for (pair<string, MemberNode*> sc : sn->getChildren()){
+                MemberNode* memn = sc.second;
+                vector<string> values = {mn->getModuleName(), sn->getStructName(), memn->toString()};
+                if (!mysql::mysql_insert(db, "struct_info", values)){
+                    return false;
+                }
+            }
+        }
+    }
+    mysql_commit(db);
+    mysql_close(db);
     return true;
 }

@@ -12,6 +12,7 @@ Module_dirs = [
     "ModuleLoader",
     "ModuleAnalyzer",
     "StructAnalyzer",
+    "DatabaseManager",
 ] # Dependency-Ordered
 
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.26)
 
-project(ModuleAnalyzer)
+project(DatabaseManager)
 if(${CMAKE_PROJECT_NAME} STREQUAL DefaultModule)
     message(FATAL_ERROR "Please change ProjectName")
 endif()
@@ -19,7 +19,7 @@ set(LLVM_COLLECTION
   LLVMAsmParser LLVMSupport LLVMCore LLVMAnalysis LLVMIRReader
 )
 
-set(REQUIRED_PACKAGES ModuleLoader DatabaseManager)
+set(REQUIRED_PACKAGES ModuleLoader)
 set(REQUIRED_PACKAGES_INCLUDE "")
 list(TRANSFORM REQUIRED_PACKAGES PREPEND ../ OUTPUT_VARIABLE REQUIRED_PACKAGES_INCLUDE)
 list(TRANSFORM REQUIRED_PACKAGES_INCLUDE APPEND /include)
@@ -49,6 +49,8 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
   "$<LINK_GROUP:RESCAN,${REQUIRED_PACKAGES}>"
   ${LLVM_COLLECTION}
 )
+
+
 
 # copy SHARED library to Lib
 add_custom_command(TARGET ${CMAKE_PROJECT_NAME} 

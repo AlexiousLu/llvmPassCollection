@@ -8,6 +8,7 @@
 #include <variant>
 #include <json.hpp>
 #include <sqlite3.h>
+#include <DatabaseManager.hh>
 
 using namespace std;
 using namespace llvm;
@@ -45,6 +46,10 @@ public:
     RootNode* loadFromSqlite3(string sqlite3_path);
 
     bool saveToSqlite3(string sqlite3_path, RootNode* root=nullptr);
+    
+    RootNode* loadFromMysql(string config_file, string table_name);
+    
+    bool saveToMysql(string config_file, string table_name, RootNode* root=nullptr);
 
 };
 

@@ -14,3 +14,4 @@ ikos_temp
 mlee_temp
 
 *.sqlite
+*.log

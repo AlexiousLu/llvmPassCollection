@@ -27,7 +27,7 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 # other package in this dictionary
-set(REQUIRED_PACKAGES ModuleLoader ModuleAnalyzer)
+set(REQUIRED_PACKAGES ModuleLoader ModuleAnalyzer DatabaseManager)
 set(REQUIRED_PACKAGES_INCLUDE "")
 list(TRANSFORM REQUIRED_PACKAGES PREPEND ../ OUTPUT_VARIABLE REQUIRED_PACKAGES_INCLUDE)
 list(TRANSFORM REQUIRED_PACKAGES_INCLUDE APPEND /include)
