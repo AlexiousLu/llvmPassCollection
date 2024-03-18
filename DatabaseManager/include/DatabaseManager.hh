@@ -20,13 +20,15 @@ public:
     vector<map<string, string>> data;
 };
 
-MYSQL* mysql_connect(string ip_address, string user_name, string password, string db_name, int port=3306, string charset="utf-8");
+MYSQL* mysql_connect(string ip_address, string user_name, string password, string db_name, int port=3306, string charset="utf8");
 
 MYSQL* mysql_connect(string config_file);
 
 bool mysql_raw_query(MYSQL* mysql, const string& raw_query);
 
 bool mysql_create_table(MYSQL* mysql, string table_name, vector<string>& columns, vector<string>& pks, string tail);
+
+bool mysql_drop_table(MYSQL* mysql, string table_name);
 
 vector<string> mysql_query_header(MYSQL* mysql, string table);
 

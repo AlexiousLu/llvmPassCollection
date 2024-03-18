@@ -231,7 +231,7 @@ ModuleNode* StructExtracter::exModule(Module* module){
 }
 
 
-RootNode* StructExtracter::exModules(map<string, Module*>* modules){
+RootNode* StructExtracter::exModules(map<string, Module*>* modules) {
     for(auto pair : *modules){
         if(pair.second == nullptr){
             cerr << "Cannot got module for " << pair.first;
@@ -249,7 +249,7 @@ RootNode* StructExtracter::exModules(map<string, Module*>* modules){
     return this->root;
 }
 
-RootNode* StructExtracter::loadFromSqlite3(string sqlite3_path){
+RootNode* StructExtracter::loadFromSqlite3(string sqlite3_path) {
     if (!filesystem::exists(sqlite3_path)) {
         cerr << "sqlite does not exist: " << sqlite3_path << endl;
         return nullptr;
@@ -300,7 +300,7 @@ RootNode* StructExtracter::loadFromSqlite3(string sqlite3_path){
     return this->root;
 }
 
-bool StructExtracter::saveToSqlite3(string sqlite3_path, RootNode* root){
+bool StructExtracter::saveToSqlite3(string sqlite3_path, RootNode* root) {
     if (root == nullptr) root = this->root;
 
     if (filesystem::exists(sqlite3_path)) filesystem::remove(sqlite3_path);
@@ -395,23 +395,27 @@ RootNode* StructExtracter::loadFromMysql(string config_file, string table_name) 
 bool StructExtracter::saveToMysql(string config_file, string table_name, RootNode* root) {
     if (root == nullptr) root = this->root;
 
-    if (filesystem::exists(config_file)) {
+    if (!filesystem::exists(config_file)) {
         cout << "Could not find mysql config file: " << config_file << endl;
     }
 
 	MYSQL* db = mysql::mysql_connect(config_file);
 	if (!db) { return false; }
     
+    if(!mysql::mysql_drop_table(db, table_name)) {
+        return false;
+    }
+
     vector<string> columns = {
-        "module_name VARCHAR(1024)  NOT NULL",
-        "struct_name VARCHAR(128)   NOT NULL",
-        "member_node_str VARCHAR(2048)  NOT NULL",
+        "module_name VARCHAR(192)  NOT NULL",
+        "struct_name VARCHAR(64)   NOT NULL",
+        "member_node_str VARCHAR(512)  NOT NULL",
     };
     vector<string> pks = {
         "PRIMARY KEY (module_name, struct_name, member_node_str)"
     };
 
-    if (!mysql::mysql_create_table(db, "struct_info", columns, pks, "")){
+    if (!mysql::mysql_create_table(db, table_name, columns, pks, "")){
         return false;
     };
 
@@ -422,7 +426,7 @@ bool StructExtracter::saveToMysql(string config_file, string table_name, RootNod
             for (pair<string, MemberNode*> sc : sn->getChildren()){
                 MemberNode* memn = sc.second;
                 vector<string> values = {mn->getModuleName(), sn->getStructName(), memn->toString()};
-                if (!mysql::mysql_insert(db, "struct_info", values)){
+                if (!mysql::mysql_insert(db, table_name, values)){
                     return false;
                 }
             }

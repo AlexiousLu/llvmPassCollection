@@ -7,6 +7,8 @@ endif()
 set(CMAKE_BUILD_TYPE "Debug")
 set(CMAKE_CXX_STANDARD 20)
 
+message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
+message(STATUS "CMAKE_ROOT = ${CMAKE_ROOT}")
 message(STATUS "Current path: ${CMAKE_CURRENT_SOURCE_DIR}")
 
 
@@ -18,6 +20,11 @@ include_directories(${LLVM_INCLUDE_DIRS})
 set(LLVM_COLLECTION
   LLVMAsmParser LLVMSupport LLVMCore LLVMAnalysis LLVMIRReader
 )
+
+# mysql is install in the default path, only to link the library in the following target_link_library.
+# find_package(MySQL MODULE REQUIRED)
+# include_directories(${MYSQL_INCLUDE_DIR})
+# link_directories(${MYSQL_LIB_DIR})
 
 set(REQUIRED_PACKAGES ModuleLoader)
 set(REQUIRED_PACKAGES_INCLUDE "")
@@ -48,6 +55,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
   PUBLIC
   "$<LINK_GROUP:RESCAN,${REQUIRED_PACKAGES}>"
   ${LLVM_COLLECTION}
+  mysqlclient
 )
 
 

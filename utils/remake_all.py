@@ -10,9 +10,9 @@ import os
 
 Module_dirs = [
     "ModuleLoader",
+    "DatabaseManager",
     "ModuleAnalyzer",
     "StructAnalyzer",
-    "DatabaseManager",
 ] # Dependency-Ordered
 
 

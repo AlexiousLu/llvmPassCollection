@@ -5,7 +5,7 @@ namespace mysql {
 MYSQL* mysql_connect(string ip_address, string user_name, string password, string db_name, int port, string charset) {
     MYSQL* mysql = new MYSQL();
     mysql_init(mysql);
-    mysql_options(mysql, MYSQL_SET_CHARSET_NAME, charset.c_str());
+    mysql_set_character_set(mysql, charset.c_str());
     if (mysql_real_connect(
         mysql, 
         ip_address.c_str(), 
@@ -38,13 +38,13 @@ MYSQL* mysql_connect(string config_file) {
 
 bool mysql_raw_query(MYSQL* mysql, const string& raw_query) {
     if (mysql_query(mysql, raw_query.c_str())) {
-        cerr << "Mysql query error: " << raw_query << "|" << mysql_error(mysql) << endl;
+        cerr << "Mysql query error: " << raw_query << "| " << mysql_error(mysql) << endl;
         return false;
     }
     return true;
 }
 
-string __mysql_expend_vectors(const vector<string>& vec) {
+string __mysql_expend_columns(const vector<string>& vec) {
     if (vec.empty()) return "";
     string res = "(";
     for (string s : vec) res += (s + ", ");
@@ -53,22 +53,36 @@ string __mysql_expend_vectors(const vector<string>& vec) {
     return res;
 }
 
+string __mysql_expend_values(const vector<string>& vec) {
+    if (vec.empty()) return "";
+    string res = "(";
+    for (string s : vec) res += ("\'" + s + "\'" + ", ");
+    res.erase(res.end() - 2, res.end());
+    res += ")";
+    return res;
+}
+
 bool mysql_create_table(MYSQL* mysql, string table_name, vector<string>& columns, vector<string>& pks, string tail) {
     vector<string> t_info(columns);
     t_info.insert(t_info.end(), pks.begin(), pks.end());
-    string query = util::Format("CREATE TABLE {0} ({1}) {2};", table_name, __mysql_expend_vectors(t_info), tail);
+    string query = util::Format("CREATE TABLE {0} {1} {2};", table_name, __mysql_expend_columns(t_info), tail);
+    return mysql_raw_query(mysql, query);
+}
+
+bool mysql_drop_table(MYSQL* mysql, string table_name) {
+    string query = util::Format("DROP TABLE IF EXISTS {0};", table_name);
     return mysql_raw_query(mysql, query);
 }
 
 bool mysql_insert(MYSQL* mysql, string table, vector<string>& values) {
     string query = util::Format("insert into {0} values {1};", 
-        table, __mysql_expend_vectors(values));
+        table, __mysql_expend_values(values));
     return mysql_raw_query(mysql, query);
 }
 
 bool mysql_insert(MYSQL* mysql, string table, vector<string>& columns, vector<string>& values) {
     string query = util::Format("insert into {0} {1} values {2};", 
-        table, __mysql_expend_vectors(columns), __mysql_expend_vectors(values));
+        table, __mysql_expend_columns(columns), __mysql_expend_values(values));
     return mysql_raw_query(mysql, query);
 }
 
@@ -122,7 +136,7 @@ MysqlResult* mysql_select(MYSQL* mysql, string table, string limitation, bool ma
 
 MysqlResult* mysql_select(MYSQL* mysql, string table, vector<string>& columns, string limitation, bool map_result) {
     MysqlResult* res = new MysqlResult();
-    string selected_columns = __mysql_expend_vectors(columns);
+    string selected_columns = __mysql_expend_columns(columns);
     selected_columns = string(selected_columns.begin() + 1, selected_columns.end() - 1);
     string query = util::Format("select {0} from {1} {2};", selected_columns, table, limitation); 
     if (mysql_raw_query(mysql, query.c_str())) {

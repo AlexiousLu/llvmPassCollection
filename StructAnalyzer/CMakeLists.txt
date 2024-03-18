@@ -7,6 +7,8 @@ endif()
 set(CMAKE_BUILD_TYPE "Debug")
 set(CMAKE_CXX_STANDARD 20)
 
+message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
+message(STATUS "CMAKE_ROOT = ${CMAKE_ROOT}")
 message(STATUS "Current path: ${CMAKE_CURRENT_SOURCE_DIR}")
 
 find_package(LLVM REQUIRED CONFIG)

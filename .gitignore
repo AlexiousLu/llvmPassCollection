@@ -12,6 +12,7 @@ temp.*
 
 ikos_temp
 mlee_temp
+backup
 
 *.sqlite
 *.log

@@ -11,12 +11,12 @@ int main(){
     // map<string, Module*>* fake_modules = new map<string, Module*>();
     // (*fake_modules)["fake_module"] = module;
 
-    map<string, Module*>* modules = ml.loadModules("./Data/linux_5.18bcs/ll.list", false);
+    map<string, Module*>* modules = ml.loadModules("./Data/linux_5.18_debug/ll.list", false);
     
     StructExtracter se;
     // RootNode* rn = se.exModules(fake_modules);
     RootNode* rn = se.exModules(modules);
-    se.saveToSqlite3("./struct_info_large.sqlite");
+    se.saveToMysql("./Config/mysql.conf", "struct_info");
     
     cout << "finish" << endl;
 
