@@ -3,7 +3,7 @@
 #include <json.hpp>
 
 
-int main(){
+int main() {
     ModuleLoader ml;
     // Module* module = ml.loadModule("test.ll");
     // Module* module = ml.loadModule("/data/linux-stable-with-debug/net/wireless/.nl80211.o.ll");
@@ -16,13 +16,9 @@ int main(){
     StructExtracter se;
     // RootNode* rn = se.exModules(fake_modules);
     RootNode* rn = se.exModules(modules);
+    // se.exModules_from_definition("./Config/mysql.conf", modules);
     se.saveToMysql("./Config/mysql.conf", "struct_info");
     
     cout << "finish" << endl;
-
-    // se.loadFromSqlite3("./struct_info_large.sqlite");
-    // rn = se.getTree();
-    // cout << (rn == (*rn)["test.c"]->getParent()) << endl;
-    // cout << "finish" << endl;
 
 }

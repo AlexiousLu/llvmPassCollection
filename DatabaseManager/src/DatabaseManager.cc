@@ -44,12 +44,12 @@ bool mysql_raw_query(MYSQL* mysql, const string& raw_query) {
     return true;
 }
 
-string __mysql_expend_columns(const vector<string>& vec) {
+string __mysql_expend_columns(const vector<string>& vec, bool with_brackets=true) {
     if (vec.empty()) return "";
-    string res = "(";
+    string res = with_brackets ? "(" : "";
     for (string s : vec) res += (s + ", ");
     res.erase(res.end() - 2, res.end());
-    res += ")";
+    res += with_brackets ? ")" : "";
     return res;
 }
 
@@ -83,6 +83,16 @@ bool mysql_insert(MYSQL* mysql, string table, vector<string>& values) {
 bool mysql_insert(MYSQL* mysql, string table, vector<string>& columns, vector<string>& values) {
     string query = util::Format("insert into {0} {1} values {2};", 
         table, __mysql_expend_columns(columns), __mysql_expend_values(values));
+    return mysql_raw_query(mysql, query);
+}
+
+bool mysql_insert_batch(MYSQL* mysql, string table, vector<vector<string>>& values_vec) {
+    vector<string> lines(values_vec.size());
+    for (int i = 0; i < values_vec.size(); i++) {
+        lines[i] = __mysql_expend_values(values_vec[i]);
+    }
+    string query = util::Format("insert into {0} values {1};", 
+        table, __mysql_expend_columns(lines, false));
     return mysql_raw_query(mysql, query);
 }
 
@@ -147,5 +157,9 @@ MysqlResult* mysql_select(MYSQL* mysql, string table, vector<string>& columns, s
     }
 }
 
+void mysql_finish(MYSQL* mysql) {
+    mysql_commit(mysql);
+    mysql_close(mysql);
+}
 
 }

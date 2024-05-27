@@ -40,8 +40,12 @@ public:
     RootNode* getTree(){ return this->root; };
 
     ModuleNode* exModule(Module* module);
-    optional<StructNode*> exVarDeclear(CallInst* CI, ModuleNode* curr_module_node);
+    Optional<StructNode*> exGlobalVar(GlobalVariable* gv, ModuleNode* curr_module_node);
+    optional<StructNode*> exLocalVarDeclear(CallInst* CI, ModuleNode* curr_module_node);
     RootNode* exModules(map<string, Module*>* modules);
+    
+    RootNode* exModule_from_definition(MYSQL* db, Module* module);
+    RootNode* exModules_from_definition(string config_file, map<string, Module*>* modules);
 
     RootNode* loadFromSqlite3(string sqlite3_path);
 

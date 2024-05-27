@@ -109,6 +109,7 @@ class MemberNode;
 class StructNode: public OrderedMappingNode<string, MemberNode*> {
 private:
     string struct_name;
+    int struct_size;
 public:
     StructNode(): OrderedMappingNode<string, MemberNode*>(STRUCT_NODE){}
     StructNode(ModuleNode* m): StructNode(){ this->setParent((Node*)m); }
@@ -116,8 +117,8 @@ public:
     string getStructName(){ return struct_name; }
     void setStructName(string struct_name) { this->struct_name = struct_name; }
 
-    // ModuleNode* getParentModule(){ return this->parent_module; }
-    // void setParentModule(ModuleNode* parent_module){ this->parent_module = parent_module; }
+    int getSize() { return struct_size; }
+    void setSize(int size) { struct_size = size; }
 
 };
 

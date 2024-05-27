@@ -68,6 +68,7 @@ void StructExtracter::exCompositeType(DICompositeType* composite_type, ExtractIn
             ExtractInfo new_info = ExtractInfo(info.curr_module_node);
             new_info.curr_struct_node = new StructNode(info.curr_module_node);
             new_info.curr_struct_node->setStructName(composite_type->getName().str());
+            new_info.curr_struct_node->setSize(composite_type->getSizeInBits());
             (*info.curr_module_node)[composite_type->getName().str()] = new_info.curr_struct_node;
             for (auto member : composite_type->getElements()) {
                 if (DIDerivedType* mem_type = dyn_cast<DIDerivedType>(member)) {
@@ -167,8 +168,22 @@ void StructExtracter::exType(DIType* type, ExtractInfo& info){
     }
 }
 
+Optional<StructNode*> StructExtracter::exGlobalVar(GlobalVariable* gv, ModuleNode* curr_module_node) {
+    StructNode* res = new StructNode();
+    ExtractInfo* info = new ExtractInfo(curr_module_node);
+    SmallVector<DIGlobalVariableExpression*> gv_debugs;
+    gv->getDebugInfo(gv_debugs);
+    if (gv_debugs.size() > 1) {
+        cerr << "A global var: " << gv->getName().str() << " has " << gv_debugs.size() << " dbg info, expected 1." << endl;
+        return nullptr;
+    }
+    DIGlobalVariableExpression* gv_debug = gv_debugs[0];
+    DIType* var_type = gv_debug->getVariable()->getType();
+    this->exType(var_type, *info);
+    return res;
+}
 
-optional<StructNode*> StructExtracter::exVarDeclear(CallInst* variable_declear, ModuleNode* curr_module_node){
+optional<StructNode*> StructExtracter::exLocalVarDeclear(CallInst* variable_declear, ModuleNode* curr_module_node){
     if(!(variable_declear->getCalledFunction()->isIntrinsic()) || 
          variable_declear->getCalledFunction()->getName() != "llvm.dbg.declare"){ //directly getName cause segfault
         return nullopt;
@@ -180,21 +195,9 @@ optional<StructNode*> StructExtracter::exVarDeclear(CallInst* variable_declear, 
         if(MetadataAsValue* mav = dyn_cast<MetadataAsValue>(arg)){
             // giving type of each variable declear (global && local) into recurExtractStruct.
             if(DILocalVariable* local_var = dyn_cast<DILocalVariable>(mav->getMetadata())){
-                local_var->printAsOperand(errs(), variable_declear->getModule()); errs() << "\n";
+                // local_var->printAsOperand(errs(), variable_declear->getModule()); errs() << "\n";
                 DIType* var_type = local_var->getType();
                 exType(var_type, *info);
-                // if(var_type->getTag() == dwarf::DW_TAG_pointer_type){
-                //     var_type = this->exDerivedType(dyn_cast<DIDerivedType>(var_type)).second;
-                // }
-                // if(var_type->getTag() == dwarf::DW_TAG_structure_type){
-                //     string struct_name = var_type->getName().str();
-                //     res = get<StructNode*>(this->exType(var_type, curr_module_node)); // must return a value
-                //     return res;
-                // } else {
-                //     return nullopt; // FIXME: not only handle with struct.
-                // }
-            } else if (DIGlobalVariable* global_var = dyn_cast<DIGlobalVariable>(mav->getMetadata())) { // todo
-                cout << "a global var found" << endl;
             }
         }
     }
@@ -218,11 +221,15 @@ ModuleNode* StructExtracter::exModule(Module* module){
     } else {
         throw;
     };
+    for(auto gv = module->global_begin(); gv != module->global_end(); gv++) {
+        this->exGlobalVar(&*gv, res);
+    }
+
     for(Module::iterator f = module->begin(), fe = module->end(); f != fe; f++){
         for (inst_iterator i = inst_begin(*f), ie = inst_end(*f); i != ie; ++i){
             if(CallInst* CI = dyn_cast<CallInst>(&*i)){
                 if(CI->getCalledFunction() != nullptr){ // idk why calledfFunction could be nullptr
-                    this->exVarDeclear(CI, res);
+                    this->exLocalVarDeclear(CI, res);
                 }
             }
         }
@@ -246,6 +253,46 @@ RootNode* StructExtracter::exModules(map<string, Module*>* modules) {
             }
         }
     }
+    return this->root;
+}
+
+RootNode* StructExtracter::exModule_from_definition(MYSQL* db, Module* module) {
+    vector<StructType*> structs = module->getIdentifiedStructTypes();
+    if (structs.empty()) return nullptr;
+    string m_name = module->getName().str();
+    vector<vector<string>> values = vector<vector<string>>(structs.size());
+    for (int i = 0; StructType* s : structs) {
+        if (s->hasName()) {
+            values[i] = {m_name, s->getName().str()};
+        } i++;
+    }
+    mysql::mysql_insert_batch(db, "struct_temp", values);
+    return nullptr;
+}
+
+RootNode* StructExtracter::exModules_from_definition(string config_file, map<string, Module*>* modules) {
+    MYSQL* db = mysql::mysql_connect(config_file);
+
+    mysql::mysql_drop_table(db, "struct_temp");
+    vector<string> columns = {
+        "module_name VARCHAR(128) BINARY  NOT NULL", // binary to make varchar case sensetive.
+        "struct_name VARCHAR(64)  BINARY  NOT NULL",
+    };
+    vector<string> pks = {
+        "PRIMARY KEY (module_name, struct_name)"
+    };
+    mysql::mysql_create_table(db, "struct_temp", columns, pks, "");
+
+    for(auto pair : *modules){
+        if(pair.second == nullptr){
+            cerr << "Cannot got module for " << pair.first;
+        } else {
+            cout << "Extracting " << pair.first << endl;
+            this->exModule_from_definition(db, pair.second);
+        }
+    }
+
+    mysql::mysql_finish(db);
     return this->root;
 }
 
@@ -399,40 +446,88 @@ bool StructExtracter::saveToMysql(string config_file, string table_name, RootNod
         cout << "Could not find mysql config file: " << config_file << endl;
     }
 
+    string struct_table = table_name + "_struct";
+    string member_table = table_name + "_member";
+
 	MYSQL* db = mysql::mysql_connect(config_file);
 	if (!db) { return false; }
     
-    if(!mysql::mysql_drop_table(db, table_name)) {
-        return false;
+    if(!mysql::mysql_drop_table(db, member_table)) { return false; }
+    if(!mysql::mysql_drop_table(db, struct_table)) { return false; }
+
+
+    vector<string> struct_columns = {
+        "struct_id INT NOT NULL",
+        "module_name VARCHAR(128) BINARY  NOT NULL", // binary to make varchar case sensetive.
+        "struct_name VARCHAR(64)  BINARY  NOT NULL",
+        "size INT"
+    };
+
+    vector<string> struct_pks = {
+        "PRIMARY KEY (struct_id)"
+    };
+
+    if (!mysql::mysql_create_table(db, struct_table, struct_columns, struct_pks, "")) {
+
     }
 
-    vector<string> columns = {
-        "module_name VARCHAR(192)  NOT NULL",
-        "struct_name VARCHAR(64)   NOT NULL",
-        "member_node_str VARCHAR(512)  NOT NULL",
+    vector<string> member_columns = {
+        "struct_id INT NOT NULL",
+        "member_name VARCHAR(128) BINARY  NOT NULL",
+        "type_str VARCHAR(64)",
+        "derived_pointer VARCHAR(64)",
+        "is_basetype BOOLEAN",
+        "is_derived BOOLEAN",
+        "offset INT",
+        "size INT",
     };
-    vector<string> pks = {
-        "PRIMARY KEY (module_name, struct_name, member_node_str)"
+    vector<string> member_pks = {
+        "PRIMARY KEY (struct_id, member_name)", 
+        "FOREIGN KEY (struct_id) REFERENCES " + struct_table + " (struct_id)",
     };
 
-    if (!mysql::mysql_create_table(db, table_name, columns, pks, "")){
+    if (!mysql::mysql_create_table(db, member_table, member_columns, member_pks, "")){
         return false;
     };
 
-    for (pair<string, ModuleNode*> rc : root->getChildren()){
+    int struct_id = 0;
+    for (pair<string, ModuleNode*> rc : root->getChildren()) {
         ModuleNode* mn = rc.second;
-        for (pair<string, StructNode*> mc : mn->getChildren()){
+        vector<vector<string>> struct_values_vec = {};
+        vector<vector<string>> member_values_vec = {};
+        for (pair<string, StructNode*> mc : mn->getChildren()) {
             StructNode* sn = mc.second;
-            for (pair<string, MemberNode*> sc : sn->getChildren()){
+            vector<string> struct_values = {
+                to_string(struct_id),
+                mn->getModuleName(),
+                sn->getStructName(),
+                to_string(sn->getSize()),
+            };
+            struct_values_vec.push_back(struct_values);
+            for (pair<string, MemberNode*> sc : sn->getChildren()) {
                 MemberNode* memn = sc.second;
-                vector<string> values = {mn->getModuleName(), sn->getStructName(), memn->toString()};
-                if (!mysql::mysql_insert(db, table_name, values)){
-                    return false;
-                }
+                vector<string> member_values = {
+                    to_string(struct_id),
+                    memn->getMemberName(),
+                    memn->getTypeStr(), 
+                    memn->getDerivedStructPointer() ? memn->getDerivedStructPointer()->getStructName() : "nullptr",
+                    memn->isBaseType() ? "1" : "0",
+                    memn->isDerivedStruct() ? "1" : "0",
+                    to_string(memn->getOffset()),
+                    to_string(memn->getSize()),
+                };
+                member_values_vec.push_back(member_values);
             }
+            struct_id++;
+        }
+        if (!struct_values_vec.empty() && !mysql::mysql_insert_batch(db, struct_table, struct_values_vec)) {
+            return false;
+        }
+
+        if (!member_values_vec.empty() && !mysql::mysql_insert_batch(db, member_table, member_values_vec)) {
+            return false;
         }
     }
-    mysql_commit(db);
-    mysql_close(db);
+    mysql::mysql_finish(db);
     return true;
 }

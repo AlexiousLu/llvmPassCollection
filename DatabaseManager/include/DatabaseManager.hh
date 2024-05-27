@@ -36,9 +36,12 @@ bool mysql_insert(MYSQL* mysql, string table, vector<string>& values);
 
 bool mysql_insert(MYSQL* mysql, string table, vector<string>& columns, vector<string>& values);
 
+bool mysql_insert_batch(MYSQL* mysql, string table, vector<vector<string>>& values);
+
 MysqlResult* mysql_select(MYSQL* mysql, string table, string limitation="", bool map_result=false);
 
 MysqlResult* mysql_select(MYSQL* mysql, string table, vector<string>& columns, string limitation="", bool map_result=false);
 
+void mysql_finish(MYSQL* mysql);
 
 }
