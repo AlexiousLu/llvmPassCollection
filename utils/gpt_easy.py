@@ -18,7 +18,7 @@ proxies = {
 }
 
 client = OpenAI(
-    api_key="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",
+    api_key="", # sk-6bK3XhYYs8IGsHaFKw3eT3BlbkFJ----1oBVqTjgmQ7QFxP127vJ
     # api_key="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", # llama3
     # base_url="https://api.perplexity.ai", 
     http_client=httpx.Client(proxies=proxies, verify=False, timeout=None), 
