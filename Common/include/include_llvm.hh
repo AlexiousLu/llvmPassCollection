@@ -8,3 +8,5 @@
 #include <llvm/IR/Metadata.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/IR/Value.h>
+
+#define lerr llvm::errs()

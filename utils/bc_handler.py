@@ -28,4 +28,5 @@ def bc_join(bc_list: str, joint_path: str, replace_header: str):
             shutil.copy(line, os.path.join(root, file))
 
 if __name__ == "__main__":
-    bc_join("/data/mongo/bc.list", "/data/mongo/mongo_bc", "/data/mongo/build")
+    # bc_join("/data/mongo/bc.list", "/data/mongo/mongo_bc", "/data/mongo/build")
+    bc_join("/data/opencv/bc.list", "/data/opencv/opencv_bc", "/data/opencv/build")

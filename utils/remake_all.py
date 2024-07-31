@@ -11,12 +11,13 @@ import os
 Module_dirs = [
     "ModuleLoader",
     "DatabaseManager",
+    "AliasAnalyzer",
     "ModuleAnalyzer",
     "StructAnalyzer",
 ] # Dependency-Ordered
 
 
-def remake_module(module_name: str, cmake_command: str="-DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_VERBOSE_MAKEFILE=OFF"):
+def remake_module(module_name: str, cmake_command: str="-DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_VERBOSE_MAKEFILE=ON"):
     os.makedirs(f"{module_name}/build", exist_ok=True)
     os.system(f"cd {module_name}/build; cmake .. {cmake_command}; make -j4")
 
