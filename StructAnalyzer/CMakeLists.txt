@@ -1,24 +1,8 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.22)
 
 project(StructAnalyzer)
-if(${CMAKE_PROJECT_NAME} STREQUAL DefaultExec)
-    message(FATAL_ERROR "Please change ProjectName")
-endif()
-set(CMAKE_BUILD_TYPE "Debug")
-set(CMAKE_CXX_STANDARD 20)
 
-message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
-message(STATUS "CMAKE_ROOT = ${CMAKE_ROOT}")
-message(STATUS "Current path: ${CMAKE_CURRENT_SOURCE_DIR}")
-
-find_package(LLVM REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-add_definitions(${LLVM_DEFINITIONS})
-include_directories(${LLVM_INCLUDE_DIRS})
-set(LLVM_COLLECTION
-  LLVMAsmParser LLVMSupport LLVMCore LLVMAnalysis LLVMIRReader
-)
+include("../Common/cmake/common_cmake.cmake")
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
@@ -37,8 +21,7 @@ list(TRANSFORM REQUIRED_PACKAGES_INCLUDE APPEND /include)
 
 # third-party project - must be explicit include in cmake, 
 #     since compile_command(and clangd) will not include such projects indexed in PATH
-include_directories( AFTER "/root/my_envs/sqlite3/include")
-link_directories( AFTER "/root/my_envs/sqlite3/lib")
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
 set(IncludeDir
   ${REQUIRED_PACKAGES_INCLUDE}
@@ -63,5 +46,5 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
   "$<LINK_GROUP:RESCAN,${REQUIRED_PACKAGES}>" # no need to handle the dependency of requried_packages
   ${LLVM_COLLECTION}
   OpenMP::OpenMP_CXX
-  sqlite3
+  unofficial::sqlite3::sqlite3
 )

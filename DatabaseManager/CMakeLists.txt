@@ -1,30 +1,12 @@
-cmake_minimum_required(VERSION 3.26)
+cmake_minimum_required(VERSION 3.22)
 
 project(DatabaseManager)
-if(${CMAKE_PROJECT_NAME} STREQUAL DefaultModule)
-    message(FATAL_ERROR "Please change ProjectName")
-endif()
-set(CMAKE_BUILD_TYPE "Debug")
-set(CMAKE_CXX_STANDARD 20)
 
-message(STATUS "CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
-message(STATUS "CMAKE_ROOT = ${CMAKE_ROOT}")
-message(STATUS "Current path: ${CMAKE_CURRENT_SOURCE_DIR}")
-
-
-find_package(LLVM REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-add_definitions(${LLVM_DEFINITIONS})
-include_directories(${LLVM_INCLUDE_DIRS})
-set(LLVM_COLLECTION
-  LLVMAsmParser LLVMSupport LLVMCore LLVMAnalysis LLVMIRReader
-)
+include("../Common/cmake/common_cmake.cmake")
 
 # mysql is install in the default path, only to link the library in the following target_link_library.
-# find_package(MySQL MODULE REQUIRED)
-# include_directories(${MYSQL_INCLUDE_DIR})
-# link_directories(${MYSQL_LIB_DIR})
+find_package(unofficial-libmysql REQUIRED)
+
 
 set(REQUIRED_PACKAGES ModuleLoader)
 set(REQUIRED_PACKAGES_INCLUDE "")
@@ -55,7 +37,8 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
   PUBLIC
   "$<LINK_GROUP:RESCAN,${REQUIRED_PACKAGES}>"
   ${LLVM_COLLECTION}
-  mysqlclient
+  # mysqlclient
+  unofficial::libmysql::libmysql
 )
 
 

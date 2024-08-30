@@ -261,7 +261,8 @@ RootNode* StructExtracter::exModule_from_definition(MYSQL* db, Module* module) {
     if (structs.empty()) return nullptr;
     string m_name = module->getName().str();
     vector<vector<string>> values = vector<vector<string>>(structs.size());
-    for (int i = 0; StructType* s : structs) {
+    int i = 0; 
+    for (StructType* s : structs) {
         if (s->hasName()) {
             values[i] = {m_name, s->getName().str()};
         } i++;

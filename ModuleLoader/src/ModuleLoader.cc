@@ -46,7 +46,7 @@ map<string, Module*>* ModuleLoader::loadModule(vector<string> filelist, LLVMCont
 
     int i = 0;
 
-    #pragma omp parallel for num_threads(10) private(err) // NOTE: all variable should be DEFINED in the for block, or it will be used as shared variable
+    #pragma omp parallel for num_threads(20) private(err) // NOTE: all variable should be DEFINED in the for block, or it will be used as shared variable
     for (i = 0; i < filelist.size(); i++){
         string filename = filelist[i];
         LLVMContext* context1 = new LLVMContext(); 
